@@ -21,6 +21,9 @@ jobs:
     env:
       ANDROID_API: 24
       TARGET: aarch64-linux-android
+      # ⬇️ A CORREÇÃO ESTÁ AQUI: Impede o Rust de procurar a libpython
+      PYO3_NO_PYTHON_LINKING: 1 
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,19 +34,24 @@ jobs:
         run: |
           rustup target add ${{ env.TARGET }}
           pip install maturin
+          
+          # Configura o NDK
           NDK=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           echo "CC_aarch64_linux_android=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
 
       - name: Build Wheel
         run: |
+          # Baixa o código fonte
           pip download --no-binary :all: --no-deps ${{ inputs.package_name }}==${{ inputs.package_version }}
           tar -xvf *.tar.gz --one-top-level=src_code --strip-components=1
           cd src_code
-          # AQUI ESTÁ O SEGREDO: --interpreter força a compatibilidade com seu Termux
+          
+          # Compila
+          echo "🚀 Compilando com PYO3_NO_PYTHON_LINKING=1..."
           maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-artifact   # Nome fixo para facilitar o script local
+          name: wheel-artifact
           path: dist/*.whl
