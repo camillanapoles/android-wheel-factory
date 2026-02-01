@@ -32,6 +32,18 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: ⚡ Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: 🦀 Setup Rust & NDK
         run: |
           # Instala o alvo Android no Rust
@@ -66,7 +78,12 @@ jobs:
           
           # Compila usando as variáveis de ambiente configuradas acima
           echo "🚀 Compilando... (Isso pode levar alguns minutos)"
-          maturin build --release --target ${{ env.TARGET }} --out ../../dist
+          # Skip auditwheel for Android cross-compilation (libraries resolved on target device)
+          maturin build \
+            --release \
+            --target ${{ env.TARGET }} \
+            --out ../../dist \
+            --skip-auditwheel
 
       - name: 📤 Upload do Artefato
         uses: actions/upload-artifact@v4
