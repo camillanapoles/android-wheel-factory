@@ -79,7 +79,11 @@ jobs:
           # Compila usando as variáveis de ambiente configuradas acima
           echo "🚀 Compilando... (Isso pode levar alguns minutos)"
           # Skip auditwheel for Android cross-compilation (libraries resolved on target device)
-          maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel
+          maturin build \
+            --release \
+            --target ${{ env.TARGET }} \
+            --out ../../dist \
+            --skip-auditwheel
 
       - name: 📤 Upload do Artefato
         uses: actions/upload-artifact@v4

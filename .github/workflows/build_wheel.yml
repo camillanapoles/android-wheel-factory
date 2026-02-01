@@ -71,7 +71,12 @@ jobs:
           
           echo "🚀 Compilando com Hack de Linker..."
           # Skip auditwheel for Android cross-compilation (libraries resolved on target device)
-          maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }} --skip-auditwheel
+          maturin build \
+            --release \
+            --target ${{ env.TARGET }} \
+            --out ../dist \
+            --interpreter python${{ inputs.python_version }} \
+            --skip-auditwheel
 
       - uses: actions/upload-artifact@v4
         with:
