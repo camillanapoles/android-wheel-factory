@@ -4,45 +4,72 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'Package Name (e.g. jiter)'
+        description: 'Nome do Pacote (ex: jiter)'
         required: true
+        default: 'jiter'
       package_version:
-        description: 'Version (e.g. 0.12.0)'
+        description: 'Versão (ex: 0.12.0)'
         required: true
+        default: '0.12.0'
 
 jobs:
   build:
+    name: Compilando ${{ inputs.package_name }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     env:
       ANDROID_API: 24
       TARGET: aarch64-linux-android
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      
-      - name: Setup Rust & NDK
+
+      - name: 🦀 Setup Rust & NDK
         run: |
+          # Instala o alvo Android no Rust
           rustup target add ${{ env.TARGET }}
+          
+          # Instala o Maturin (o construtor)
           pip install maturin
           
-          # Configura variáveis para usar o Clang do NDK
+          # Configura as variáveis de ambiente para o Linker do Android
+          # O GitHub Actions já tem o NDK instalado nesta variável
           NDK_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          
+          # Exporta para o ENV do GitHub (para os próximos passos enxergarem)
           echo "CC_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CXX_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang++" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
 
-      - name: Build Wheel
+      - name: 🏗️ Baixar e Compilar
         run: |
-          # Baixa o código fonte
-          pip download --no-binary :all: ${{ inputs.package_name }}==${{ inputs.package_version }}
-          tar -xvf *.tar.gz
-          cd ${{ inputs.package_name }}-* || cd ${{ inputs.package_name }}*
+          echo "🤖 Iniciando fábrica para: ${{ inputs.package_name }} v${{ inputs.package_version }}"
           
-          # Compila
-          maturin build --release --target ${{ env.TARGET }} --out ../dist
+          # Cria pasta limpa
+          mkdir -p build_area
+          cd build_area
           
-      - uses: actions/upload-artifact@v4
+          # Baixa APENAS o código fonte (sdist), ignorando binários
+          pip download --no-binary :all: --no-deps ${{ inputs.package_name }}==${{ inputs.package_version }}
+          
+          # Extrai o tar.gz (qualquer nome que vier)
+          tar -xvf *.tar.gz --one-top-level=src_code --strip-components=1
+          cd src_code
+          
+          # Compila usando as variáveis de ambiente configuradas acima
+          echo "🚀 Compilando... (Isso pode levar alguns minutos)"
+          maturin build --release --target ${{ env.TARGET }} --out ../../dist
+
+      - name: 📤 Upload do Artefato
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.package_name }}-wheel
+          name: ${{ inputs.package_name }}-android-wheel
           path: dist/*.whl
