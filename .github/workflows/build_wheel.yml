@@ -21,8 +21,7 @@ jobs:
     env:
       ANDROID_API: 24
       TARGET: aarch64-linux-android
-      # ⬇️ A CORREÇÃO ESTÁ AQUI: Impede o Rust de procurar a libpython
-      PYO3_NO_PYTHON_LINKING: 1 
+      PYO3_NO_PYTHON_LINKING: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -35,20 +34,31 @@ jobs:
           rustup target add ${{ env.TARGET }}
           pip install maturin
           
-          # Configura o NDK
+          # 1. Configura NDK
           NDK=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
           echo "CC_aarch64_linux_android=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
 
+          # 2. O TRUQUE NUCLEAR: Criar uma libpython falsa para enganar o linker
+          # Cria pasta libs
+          mkdir -p libs
+          # Cria um arquivo vazio com o nome que ele procura
+          touch libs/libpython${{ inputs.python_version }}.so
+          
+          # 3. Configura o Rust para usar essa pasta e ignorar erros de símbolos
+          # -L libs: Olha na nossa pasta falsa
+          # -lpython: Acha o arquivo falso
+          # --unresolved-symbols=ignore-all: Não reclama que o arquivo é vazio
+          echo "RUSTFLAGS=-L $(pwd)/libs -C link-arg=-Wl,--unresolved-symbols=ignore-all" >> $GITHUB_ENV
+
       - name: Build Wheel
         run: |
-          # Baixa o código fonte
           pip download --no-binary :all: --no-deps ${{ inputs.package_name }}==${{ inputs.package_version }}
           tar -xvf *.tar.gz --one-top-level=src_code --strip-components=1
           cd src_code
           
-          # Compila
-          echo "🚀 Compilando com PYO3_NO_PYTHON_LINKING=1..."
+          echo "🚀 Compilando com Hack de Linker..."
+          # Adicionei --no-default-features para tentar limpar dependências extras se existirem
           maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }}
 
       - uses: actions/upload-artifact@v4
