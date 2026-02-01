@@ -29,6 +29,19 @@ jobs:
         with:
           python-version: ${{ inputs.python_version }}
 
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Setup Rust & NDK
         run: |
           rustup target add ${{ env.TARGET }}
@@ -58,8 +71,8 @@ jobs:
           cd src_code
           
           echo "🚀 Compilando com Hack de Linker..."
-          # Adicionei --no-default-features para tentar limpar dependências extras se existirem
-          maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }}
+          # Skip auditwheel for Android cross-compilation (libraries resolved on target device)
+          maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }} --skip-auditwheel
 
       - uses: actions/upload-artifact@v4
         with:
