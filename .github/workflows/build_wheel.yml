@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       package_name:
-        description: 'Nome do Pacote (ex: jiter)'
+        description: 'Nome do Pacote'
         required: true
       package_version:
-        description: 'Versão (ex: 0.12.0)'
+        description: 'Versão'
         required: true
       python_version:
         description: 'Versão Python (ex: 3.12)'
@@ -16,47 +16,34 @@ on:
 
 jobs:
   build:
-    name: Build ${{ inputs.package_name }} (py${{ inputs.python_version }})
+    name: Build ${{ inputs.package_name }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
     env:
       ANDROID_API: 24
       TARGET: aarch64-linux-android
     steps:
       - uses: actions/checkout@v4
-
-      - name: 🐍 Setup Python ${{ inputs.python_version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
 
-      - name: 🦀 Setup Rust & NDK
+      - name: Setup Rust & NDK
         run: |
           rustup target add ${{ env.TARGET }}
           pip install maturin
-          
-          # Configuração do Linker (Crítico para Android)
-          NDK_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-          echo "CC_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          NDK=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          echo "CC_aarch64_linux_android=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
 
-      - name: 🏗️ Build Wheel
+      - name: Build Wheel
         run: |
-          echo "Compilando para Python ${{ inputs.python_version }}..."
-          
-          # Baixa o código fonte
           pip download --no-binary :all: --no-deps ${{ inputs.package_name }}==${{ inputs.package_version }}
           tar -xvf *.tar.gz --one-top-level=src_code --strip-components=1
           cd src_code
-          
-          # Compila
-          # O flag -i python${{ inputs.python_version }} força a versão correta
+          # AQUI ESTÁ O SEGREDO: --interpreter força a compatibilidade com seu Termux
           maturin build --release --target ${{ env.TARGET }} --out ../dist --interpreter python${{ inputs.python_version }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel-artifact
+          name: wheel-artifact   # Nome fixo para facilitar o script local
           path: dist/*.whl
-
