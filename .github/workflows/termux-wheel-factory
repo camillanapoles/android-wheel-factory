@@ -1,0 +1,99 @@
+name: Android Wheel Factory
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Versão Python (ex: 3.12) - Geralmente preenchido automaticamente pelo Termux'
+        required: true
+        default: '3.12'
+      package_name:
+        description: 'Nome do Pacote (ex: jiter)'
+        required: true
+      package_version:
+        description: 'Versão (DEIXE EM BRANCO para a mais recente)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: 🏗️ Build ${{ inputs.package_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    env:
+      ANDROID_API: 24
+      TARGET: aarch64-linux-android
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python ${{ inputs.python_version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+
+      - name: 📱 Setup Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: ⚡ Cache Rust Toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.rustup/
+            target/
+          key: ${{ runner.os }}-rust-${{ env.TARGET }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-${{ env.TARGET }}-
+            ${{ runner.os }}-rust-
+
+      - name: 🦀 Setup Rust & PyO3 Env
+        run: |
+          set -e
+          rustup target add ${{ env.TARGET }}
+          pip install --upgrade pip maturin
+          
+          echo "PYO3_PYTHON=$(which python)" >> $GITHUB_ENV
+          echo "PYO3_NO_PYTHON_LINKING=1" >> $GITHUB_ENV
+          
+          NDK_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CC_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CXX_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang++" >> $GITHUB_ENV
+
+      - name: 🏗️ Download & Build Wheel
+        run: |
+          set -e
+          mkdir -p build_area && cd build_area
+          
+          PKG="${{ inputs.package_name }}"
+          VER="${{ inputs.package_version }}"
+          
+          # LÓGICA DE DEFAULT PYTHONICA: Se a versão for vazia, não passa a flag ==versao
+          if [ -z "$VER" ]; then
+            echo "📥 Versão não especificada. Baixando a versão mais recente de $PKG..."
+            pip download --no-binary :all: --no-deps "$PKG"
+          else
+            echo "📥 Baixando $PKG na versão exata $VER..."
+            pip download --no-binary :all: --no-deps "$PKG==$VER"
+          fi
+          
+          tar -xzf *.tar.gz
+          cd $(find . -maxdepth 1 -type d | tail -n 1)
+          
+          echo "🚀 Building para Android ARM64..."
+          maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip
+
+      - name: 📤 Upload Wheel Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.package_name }}-android-aarch64
+          path: dist/*.whl
+          if-no-files-found: error
+          retention-days: 7 # Reduzi para 7 dias pois é um uso sob demanda
