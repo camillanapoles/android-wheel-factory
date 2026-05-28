@@ -1,0 +1,51 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop, "copilot/**" ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml
+
+      - name: 📋 List Test Files
+        run: |
+          echo "Available test files:"
+          ls -lah tests/
+
+      - name: 🔨 Make Test Scripts Executable
+        run: |
+          chmod +x tests/*.sh scripts/*.sh || true
+
+      - name: 🧪 Run All Tests
+        run: |
+          bash tests/run_all_tests.sh
+
+      - name: 📊 Test Summary
+        if: always()
+        run: |
+          echo "═══════════════════════════════════════════"
+          echo "Test execution completed"
+          echo "═══════════════════════════════════════════"
