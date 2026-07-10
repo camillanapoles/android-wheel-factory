@@ -59,7 +59,7 @@ jobs:
           rustup target add ${{ env.TARGET }}
           pip install --upgrade pip maturin
           
-          echo "PYO3_PYTHON=$(which python)" >> $GITHUB_ENV
+          echo "PYO3_PYTHON=$(which python3)" >> $GITHUB_ENV
           echo "PYO3_NO_PYTHON_LINKING=1" >> $GITHUB_ENV
           
           NDK_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
@@ -70,7 +70,7 @@ jobs:
       - name: 📚 Create Fake libpython for Linker
         run: |
           set -e
-          PYTHON_VER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
           mkdir -p fake_libs
           touch fake_libs/libpython${PYTHON_VER}.so
           echo "RUSTFLAGS=-L ${{ github.workspace }}/fake_libs -C link-arg=-Wl,--unresolved-symbols=ignore-all -C link-arg=-Wl,--allow-shlib-undefined" >> $GITHUB_ENV
@@ -96,8 +96,9 @@ jobs:
           cd $(find . -maxdepth 1 -type d | tail -n 1)
           
           echo "🚀 Building para Android ARM64..."
+          PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
           maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip \
-            -i $(which python)
+            -i python${PYTHON_VER}
 
       - name: 📤 Upload Wheel Artifact
         uses: actions/upload-artifact@v4
