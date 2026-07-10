@@ -95,10 +95,25 @@ jobs:
           tar -xzf *.tar.gz
           cd $(find . -maxdepth 1 -type d | tail -n 1)
           
-          echo "🚀 Building para Android ARM64..."
-          PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip \
-            -i python${PYTHON_VER}
+          echo "🔍 Detectando tipo de projeto..."
+          
+          # Detecta tipo de projeto e usa ferramenta apropriada
+          if [ -f "Cargo.toml" ]; then
+            echo "🦀 Projeto Rust detectado (Cargo.toml) → usando maturin"
+            PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+            maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip \
+              -i python${PYTHON_VER}
+          elif [ -f "pyproject.toml" ]; then
+            echo "🐍 Projeto Python moderno detectado (pyproject.toml) → usando python -m build"
+            pip install build
+            python -m build --wheel --outdir ../../dist
+          elif [ -f "setup.py" ]; then
+            echo "🐍 Projeto Python legado detectado (setup.py) → usando pip wheel"
+            pip wheel . -w ../../dist --no-deps
+          else
+            echo "❌ Tipo de projeto não reconhecido (sem Cargo.toml, pyproject.toml ou setup.py)"
+            exit 1
+          fi
 
       - name: 📤 Upload Wheel Artifact
         uses: actions/upload-artifact@v4
