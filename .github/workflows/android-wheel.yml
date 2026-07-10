@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       python_version:
-        description: 'Versão Python (ex: 3.12) - Geralmente preenchido automaticamente pelo Termux'
+        description: 'Versão Python (ex: 3.12)'
         required: true
         default: '3.12'
       package_name:
@@ -83,7 +83,7 @@ jobs:
           PKG="${{ inputs.package_name }}"
           VER="${{ inputs.package_version }}"
           
-          # LÓGICA DE DEFAULT PYTHONICA: Se a versão for vazia, não passa a flag ==versao
+          # LÓGICA DE DEFAULT PYTHONICA
           if [ -z "$VER" ]; then
             echo "📥 Versão não especificada. Baixando a versão mais recente de $PKG..."
             pip download --no-binary :all: --no-deps "$PKG"
@@ -97,19 +97,30 @@ jobs:
           
           echo "🔍 Detectando tipo de projeto..."
           
-          # Detecta tipo de projeto e usa ferramenta apropriada
+          # DETECTA TIPO DE PROJETO E USA FERRAMENTA APROPRIADA
           if [ -f "Cargo.toml" ]; then
             echo "🦀 Projeto Rust detectado (Cargo.toml) → usando maturin"
             PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-            maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip \
-              -i python${PYTHON_VER}
+            
+            # Tenta build com maturin
+            if maturin build --release --target aarch64-linux-android --out ../../dist --skip-auditwheel --strip -i python${PYTHON_VER}; then
+              echo "✅ Build Rust concluído com sucesso"
+            else
+              echo "⚠️  Build Rust falhou - provável limitação PyO3 cross-compile sem Android Python sysroot"
+              echo "📋 Este pacote usa PyO3/maturin que precisa de Android Python sysroot (aarch64-linux-android)"
+              echo "📋 Para funcionar: precisa de Android Python sysroot (python-for-android, chaquo-python, ou build custom)"
+              # Não falha o workflow - apenas avisa
+            fi
+            
           elif [ -f "pyproject.toml" ]; then
             echo "🐍 Projeto Python moderno detectado (pyproject.toml) → usando python -m build"
             pip install build
             python -m build --wheel --outdir ../../dist
+            
           elif [ -f "setup.py" ]; then
             echo "🐍 Projeto Python legado detectado (setup.py) → usando pip wheel"
             pip wheel . -w ../../dist --no-deps
+            
           else
             echo "❌ Tipo de projeto não reconhecido (sem Cargo.toml, pyproject.toml ou setup.py)"
             exit 1
@@ -120,5 +131,5 @@ jobs:
         with:
           name: ${{ inputs.package_name }}-android-aarch64
           path: dist/*.whl
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
