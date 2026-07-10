@@ -34,7 +34,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ inputs.python_version }}
-          cache: 'pip'
+          cache: ''
 
       - name: 📱 Setup Android NDK
         uses: android-actions/setup-android@v3
@@ -67,6 +67,14 @@ jobs:
           echo "CC_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
           echo "CXX_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang++" >> $GITHUB_ENV
 
+      - name: 📚 Create Fake libpython for Linker
+        run: |
+          set -e
+          PYTHON_VER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          mkdir -p fake_libs
+          touch fake_libs/libpython${PYTHON_VER}.so
+          echo "RUSTFLAGS=-L ${{ github.workspace }}/fake_libs -C link-arg=-Wl,--unresolved-symbols=ignore-all -C link-arg=-Wl,--allow-shlib-undefined" >> $GITHUB_ENV
+
       - name: 🏗️ Download & Build Wheel
         run: |
           set -e
@@ -88,7 +96,8 @@ jobs:
           cd $(find . -maxdepth 1 -type d | tail -n 1)
           
           echo "🚀 Building para Android ARM64..."
-          maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip
+          maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip \
+            -i $(which python)
 
       - name: 📤 Upload Wheel Artifact
         uses: actions/upload-artifact@v4
@@ -96,4 +105,4 @@ jobs:
           name: ${{ inputs.package_name }}-android-aarch64
           path: dist/*.whl
           if-no-files-found: error
-          retention-days: 7 # Reduzi para 7 dias pois é um uso sob demanda
+          retention-days: 7
