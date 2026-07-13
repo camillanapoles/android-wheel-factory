@@ -14,17 +14,21 @@ on:
         description: 'Versão (DEIXE EM BRANCO para a mais recente)'
         required: false
         default: ''
+      arch:
+        description: 'Arquitetura alvo (aarch64, x86_64, armv7l, i686)'
+        required: false
+        default: 'aarch64'
 
 jobs:
   build:
-    name: 🏗️ Build ${{ inputs.package_name }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: write
     env:
       ANDROID_API: 24
-      TARGET: aarch64-linux-android
+      ARCH: ${{ inputs.arch }}
+      TARGET: ${{ inputs.arch == 'aarch64' && 'aarch64-linux-android' || inputs.arch == 'x86_64' && 'x86_64-linux-android' || inputs.arch == 'armv7l' && 'armv7a-linux-androideabi' || inputs.arch == 'i686' && 'i686-linux-android' || 'aarch64-linux-android' }}
 
     steps:
       - name: 📥 Checkout Repository
@@ -63,9 +67,34 @@ jobs:
           echo "PYO3_NO_PYTHON_LINKING=1" >> $GITHUB_ENV
           
           NDK_TOOLCHAIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
-          echo "CC_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
-          echo "CXX_aarch64_linux_android=$NDK_TOOLCHAIN/aarch64-linux-android${{ env.ANDROID_API }}-clang++" >> $GITHUB_ENV
+          
+          # Mapear arquitetura para prefixo do linker
+          case "${{ env.ARCH }}" in
+            aarch64)
+              LLVM_TRIPLE="aarch64-linux-android"
+              CARGO_TRIPLE="AARCH64_LINUX_ANDROID"
+              ;;
+            x86_64)
+              LLVM_TRIPLE="x86_64-linux-android"
+              CARGO_TRIPLE="X86_64_LINUX_ANDROID"
+              ;;
+            armv7l)
+              LLVM_TRIPLE="armv7a-linux-androideabi"
+              CARGO_TRIPLE="ARMV7A_LINUX_ANDROIDEABI"
+              ;;
+            i686)
+              LLVM_TRIPLE="i686-linux-android"
+              CARGO_TRIPLE="I686_LINUX_ANDROID"
+              ;;
+            *)
+              echo "❌ Arquitetura não suportada: ${{ env.ARCH }}"
+              exit 1
+              ;;
+          esac
+          
+          echo "CARGO_TARGET_${CARGO_TRIPLE}_LINKER=$NDK_TOOLCHAIN/${LLVM_TRIPLE}${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CC_${LLVM_TRIPLE//-/_}=$NDK_TOOLCHAIN/${LLVM_TRIPLE}${{ env.ANDROID_API }}-clang" >> $GITHUB_ENV
+          echo "CXX_${LLVM_TRIPLE//-/_}=$NDK_TOOLCHAIN/${LLVM_TRIPLE}${{ env.ANDROID_API }}-clang++" >> $GITHUB_ENV
 
       - name: 📚 Create Fake libpython for Linker
         run: |
@@ -103,11 +132,11 @@ jobs:
             PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
             
             # Tenta build com maturin
-            if maturin build --release --target aarch64-linux-android --out ../../dist --skip-auditwheel --strip -i python${PYTHON_VER}; then
+            if maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip -i python${PYTHON_VER}; then
               echo "✅ Build Rust concluído com sucesso"
             else
               echo "⚠️  Build Rust falhou - provável limitação PyO3 cross-compile sem Android Python sysroot"
-              echo "📋 Este pacote usa PyO3/maturin que precisa de Android Python sysroot (aarch64-linux-android)"
+              echo "📋 Este pacote usa PyO3/maturin que precisa de Android Python sysroot (${{ env.TARGET }})"
               echo "📋 Para funcionar: precisa de Android Python sysroot (python-for-android, chaquo-python, ou build custom)"
               # Não falha o workflow - apenas avisa
             fi
@@ -129,7 +158,7 @@ jobs:
       - name: 📤 Upload Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.package_name }}-android-aarch64
+          name: ${{ inputs.package_name }}-android-${{ inputs.arch }}
           path: dist/*.whl
           if-no-files-found: warn
           retention-days: 7
