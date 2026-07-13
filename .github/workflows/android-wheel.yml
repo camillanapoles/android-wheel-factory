@@ -104,6 +104,13 @@ jobs:
           touch fake_libs/libpython${PYTHON_VER}.so
           echo "RUSTFLAGS=-L ${{ github.workspace }}/fake_libs -C link-arg=-Wl,--unresolved-symbols=ignore-all -C link-arg=-Wl,--allow-shlib-undefined" >> $GITHUB_ENV
 
+      - name: 🐍 Prepare Android Python Sysroot (para maturin/PyO3)
+        run: |
+          ./.github/scripts/prepare-android-python.sh \
+            "${{ env.ARCH }}" \
+            "${{ env.ANDROID_API }}" \
+            "${{ inputs.python_version }}"
+
       - name: 🏗️ Download & Build Wheel
         run: |
           set -e
@@ -131,14 +138,20 @@ jobs:
             echo "🦀 Projeto Rust detectado (Cargo.toml) → usando maturin"
             PYTHON_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
             
-            # Tenta build com maturin
-            if maturin build --release --target ${{ env.TARGET }} --out ../../dist --skip-auditwheel --strip -i python${PYTHON_VER}; then
+            # Tenta build com maturin + Android Python sysroot
+            if maturin build $MATURIN_BUILD_ARGS --out ../../dist; then
               echo "✅ Build Rust concluído com sucesso"
             else
-              echo "⚠️  Build Rust falhou - provável limitação PyO3 cross-compile sem Android Python sysroot"
-              echo "📋 Este pacote usa PyO3/maturin que precisa de Android Python sysroot (${{ env.TARGET }})"
-              echo "📋 Para funcionar: precisa de Android Python sysroot (python-for-android, chaquo-python, ou build custom)"
-              # Não falha o workflow - apenas avisa
+              echo "⚠️  Build Rust falhou - tentando fallback: pre-built wheel..."
+              # Fallback: baixar wheel manylinux (pode funcionar no Termux com patchelf)
+              cd ../..
+              pip download --only-binary :all: --platform manylinux_2_34_aarch64 \
+                --platform manylinux2014_aarch64 \
+                --platform linux_aarch64 \
+                -d dist \
+                "$PKG${VER:+==$VER}" 2>/dev/null || \
+              pip download --only-binary :all: -d dist "$PKG${VER:+==$VER}" 2>/dev/null || true
+              ls dist/ 2>/dev/null || echo "⚠️ Nenhuma wheel alternativa encontrada"
             fi
             
           elif [ -f "pyproject.toml" ]; then
