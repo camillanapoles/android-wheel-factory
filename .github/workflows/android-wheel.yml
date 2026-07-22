@@ -130,7 +130,7 @@ jobs:
           
           tar -xzf *.tar.gz
           cd $(find . -maxdepth 1 -type d | tail -n 1)
-          
+        
           echo "🔍 Detectando tipo de projeto..."
           
           # DETECTA TIPO DE PROJETO E USA FERRAMENTA APROPRIADA
