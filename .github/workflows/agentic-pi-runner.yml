@@ -1,0 +1,52 @@
+name: Agentic Pi-Coding Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Instrução em linguagem natural para o Pi Coding Agent executar no repositório'
+        required: true
+        default: 'Analise o projeto, corrija bugs potenciais e adicione testes.'
+
+jobs:
+  run-agentic-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Permissão obrigatória para commitar código de volta ao repositório
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pi Coding Agent Globally
+        run: npm install -g @mariozechner/pi-coding-agent
+
+      - name: Configure Git Identity for Autonomous Commits
+        run: |
+          git config --global user.name "Agentic Orchestrator Bot"
+          git config --global user.email "orchestrator@bot.internal"
+
+      - name: Run Async Python Orchestrator with Embedded Pi
+        env:
+          AGENT_PROMPT: ${{ github.event.inputs.prompt }}
+        run: |
+          python3 orchestrator_pi_async.py --prompt "$AGENT_PROMPT"
+
+      - name: Commit and Push Autonomous Changes Back to Repo
+        run: |
+          git status
+          git add .
+          git diff --staged --quiet || git commit -m "feat(agent): executed task via embedded Pi Coding Agent [skip ci]"
+          git push
